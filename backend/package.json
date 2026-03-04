@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "echo \"Direct run required. Please execute: 'npm run start:node' and 'npm run start:python' in separate terminals.\"",
+    "start:node": "node src/server.js",
+    "start:python": "cd rag && gunicorn --bind 127.0.0.1:5000 app:app --timeout 120",
+    "dev": "echo \"Direct run required. Please execute: 'npm run dev:node' and 'npm run dev:python' in separate terminals.\"",
+    "dev:node": "nodemon src/server.js",
+    "dev:python": "cd rag && flask run --port=5000",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -14,17 +18,14 @@
   "dependencies": {
     "axios": "^1.13.5",
     "bcryptjs": "^3.0.3",
-    "cheerio": "^1.2.0",
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "mongodb": "^7.1.0",
     "mongoose": "^9.2.0",
     "multer": "^2.0.2",
-    "nodemon": "^3.1.11",
-    "pdf-parse": "^1.1.1"
+    "nodemon": "^3.1.11"
   }
 }

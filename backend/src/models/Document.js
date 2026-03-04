@@ -4,9 +4,15 @@ const documentSchema = new mongoose.Schema({
     filename: { type: String, required: true },
     originalName: { type: String, required: true },
     path: { type: String, required: true },
-    type: { type: String, enum: ['file', 'url'], default: 'file' },
     uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    status: { type: String, enum: ['pending', 'processed', 'failed'], default: 'pending' }
+    chromaCollectionId: { type: String },
+    status: { type: String, enum: ['pending', 'embedded', 'failed'], default: 'pending' },
+    summary: { type: String },
+    quiz: [{
+        question: { type: String },
+        options: [{ type: String }],
+        correctAnswer: { type: String }
+    }]
 }, { timestamps: true });
 
 module.exports = mongoose.model('Document', documentSchema);

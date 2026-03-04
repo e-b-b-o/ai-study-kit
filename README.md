@@ -1,75 +1,133 @@
-# Xtract and Chat 
+# AI Study Kit
 
-A simple, full-stack web application featuring:
+A full-stack academic study tool that generates zero-hallucination summaries and quizzes from uploaded lecture PDFs using RAG (Retrieval-Augmented Generation).
 
-- **Landing Page**: Modern, responsive design.
-- **AI Chatbot**: Floating widget that answers questions using RAG (Retrieval-Augmented Generation).
-- **Admin Dashboard**: Secure area to upload documents for the chatbot's knowledge base.
-- **Authentication**: Secure Login/Register flow with JWT.
+## Architecture
 
-## Tech Stack
+```
+Frontend (React/Vite)  →  Backend (Express)  →  RAG Service (Flask)
+                              ↓                       ↓
+                          MongoDB Atlas           ChromaDB
+```
 
-- **Frontend**: React (Vite)
-- **Backend**: Node.js, Express
-- **AI/RAG**: Python, ChromaDB, Google Gemini API
+- **Frontend**: React + Vite (runs independently, NOT Dockerized)
+- **Backend**: Node.js + Express (Dockerized)
+- **RAG Service**: Python 3.11 + Flask + Gunicorn (Dockerized)
 - **Database**: MongoDB Atlas
+- **Vector Store**: ChromaDB (persistent volume)
 
-## Setup
+## Quick Start
 
 ### Prerequisites
 
-- Node.js
-- Python 3.11
-- MongoDB Atlas Account
-- Google Gemini API Key
+- [Docker](https://docs.docker.com/get-docker/) & Docker Compose
+- Node.js (for frontend only)
 
-### Installation
+### 1. Environment Variables
 
-1.  **Clone the repository**
-2.  **Install Backend Dependencies**
-    ↗️ bash
-    ↗️ cd server
-    ↗️ npm install
-3.  **Install Frontend Dependencies**
-    ↗️ bash
-    ↗️ cd client
-    ↗️ npm install
-4.  **Install Python Requirements**
-    ↗️ bash
-    ↗️ cd rag_service
-    ↗️ pip install -r requirements.txt
-5.  **Environment Variables**
-    Create a `.env` file in the root based on `.env.example`.
+```bash
+cp .env.example .env
+```
 
-### Running the App
+Fill in your values:
 
-Under the Terminal
+| Variable | Description |
+|---|---|
+| `MONGODB_URI` | MongoDB Atlas connection string |
+| `JWT_SECRET` | Secret key for JWT authentication |
+| `GEMINI_API_KEY` | Google Gemini API key |
 
-- In Server folder run: `npm start`
-- In Client Folder: `npm run dev`
-- In Rag_Service Folder: `py -3.11 app.py`
+### 2. Start Backend + RAG (Docker)
 
-## Admin Setup & File Upload
+```bash
+docker-compose up --build
+```
 
-### 1. Create an Admin User
+This starts:
+- **Backend** on `http://localhost:4000`
+- **RAG Service** on `http://localhost:5000`
 
-New users are registered as standard users by default. To make a user an admin:
+### 3. Start Frontend (Separate Terminal)
 
-1.  Register a new user via the website (e.g., `admin@example.com`).
-2.  Run the included script in the `server` directory:
-    bash
-    cd server
-    node make_admin.js <your_email>
+```bash
+cd client
+npm install
+npm run dev
+```
 
-### 3. Remove Admin Rights
+Frontend runs on `http://localhost:5173`
 
-To demote an admin back to a standard user:
+## Health Checks
 
-In bash
-node remove_admin.js <email>
+```bash
+# Backend health (also checks RAG + MongoDB connectivity)
+curl http://localhost:4000/health
 
-### 4. Delete Documents
+# RAG service health
+curl http://localhost:5000/health
+```
 
-In the Admin Dashboard, click the **"Delete"** button next to a document to remove it.
+## Project Structure
 
-- **Note**: This also resets the AI's knowledge base to ensure accuracy. You may need to re-upload other documents if you want them to remain in the AI's memory.
+```
+├── backend/
+│   ├── src/
+│   │   ├── controllers/     # Auth, Document, Generation logic
+│   │   ├── middlewares/      # JWT auth, file upload (Multer)
+│   │   ├── models/           # User, Document (Mongoose)
+│   │   ├── routes/           # API route definitions
+│   │   └── server.js         # Express entry point
+│   ├── rag/
+│   │   ├── app.py            # Flask API (ingest, summary, quiz, health)
+│   │   ├── rag.py            # ChromaDB + Gemini RAG pipeline
+│   │   ├── requirements.txt
+│   │   └── Dockerfile
+│   ├── Dockerfile
+│   └── package.json
+├── client/
+│   ├── src/
+│   │   ├── components/       # ThemeProvider (dark/light mode)
+│   │   ├── pages/            # Landing, Login, Register, Dashboard, StudyKit
+│   │   ├── services/         # API client, auth, study kit services
+│   │   └── index.css         # Single consolidated CSS file
+│   └── package.json
+├── docker-compose.yml        # Backend + RAG only
+├── .env.example              # Environment variable template
+└── .gitignore
+```
+
+## API Endpoints
+
+### Backend (`localhost:4000`)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `POST` | `/api/auth/register` | Register user |
+| `POST` | `/api/auth/login` | Login user |
+| `POST` | `/api/documents/upload` | Upload PDF |
+| `GET` | `/api/documents` | List documents |
+| `GET` | `/api/documents/:id` | Get document |
+| `DELETE` | `/api/documents/:id` | Delete document |
+| `POST` | `/api/generate/:id/summary` | Generate summary |
+| `POST` | `/api/generate/:id/quiz` | Generate quiz |
+
+### RAG Service (`localhost:5000`)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `POST` | `/ingest` | Ingest document vectors |
+| `POST` | `/generate-summary` | Generate summary from vectors |
+| `POST` | `/generate-quiz` | Generate quiz from vectors |
+| `POST` | `/reset` | Delete document vectors |
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React, Vite, Lucide Icons |
+| Backend | Node.js, Express, Mongoose |
+| RAG | Python, Flask, ChromaDB, Google Gemini |
+| Database | MongoDB Atlas |
+| DevOps | Docker, Docker Compose |

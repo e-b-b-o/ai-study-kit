@@ -9,5 +9,21 @@ Desktop.ini
 
 # Environment variables
 .env
-.env.*
+!.env.example
 
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+
+# Build output
+dist/
+build/
+
+# Data / runtime
+chroma_db/
+uploads/
+*.log
+
+# Docker
+.docker/

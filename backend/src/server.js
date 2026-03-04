@@ -7,11 +7,11 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 
 const authRoutes = require("./routes/auth.routes.js");
-const adminRoutes = require("./routes/admin.routes.js");
-const chatRoutes = require("./routes/chat.routes.js");
+const documentRoutes = require("./routes/document.routes.js");
+const generationRoutes = require("./routes/generation.routes.js");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 4000;
 
 // Security Middleware
 app.use(helmet({
@@ -45,11 +45,36 @@ mongoose
 
 // Routes
 app.use("/api/auth", authRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/chat", chatLimiter, chatRoutes);
+app.use("/api/documents", documentRoutes);
+app.use("/api/generate", generationRoutes);
 
 app.get("/", (req, res) => {
   res.send("API is running...");
+});
+
+// Health check endpoint for Docker and monitoring
+app.get("/health", async (req, res) => {
+  const mongoState = mongoose.connection.readyState;
+  const mongoStatus = mongoState === 1 ? "connected" : mongoState === 2 ? "connecting" : "disconnected";
+  
+  let ragStatus = "unknown";
+  try {
+    const axios = require("axios");
+    const ragUrl = process.env.RAG_SERVICE_URL || "http://127.0.0.1:5000";
+    const ragRes = await axios.get(`${ragUrl}/health`, { timeout: 5000 });
+    ragStatus = ragRes.data?.status || "reachable";
+  } catch {
+    ragStatus = "unreachable";
+  }
+
+  res.json({
+    status: "healthy",
+    service: "backend",
+    mongodb: mongoStatus,
+    rag_service: ragStatus,
+    rag_service_url: process.env.RAG_SERVICE_URL || "http://127.0.0.1:5000",
+    uptime: process.uptime()
+  });
 });
 
 // Start Server
