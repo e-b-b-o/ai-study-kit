@@ -1,14 +1,33 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { studyKitService } from '../services/studyKitService';
 import authService from '../services/authService';
+import { useTheme } from '../components/ThemeProvider';
+import {
+    Upload, FileText, Type, Trash2, ExternalLink, LogOut,
+    Sun, Moon, BookOpen, Brain, StickyNote, MessageCircle,
+    HelpCircle, CheckCircle2, AlertCircle, CloudUpload, X, Sparkles
+} from 'lucide-react';
 
 function Dashboard() {
     const [documents, setDocuments] = useState([]);
     const [file, setFile] = useState(null);
+    const [textContent, setTextContent] = useState('');
     const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
     const [error, setError] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
+    const [dragOver, setDragOver] = useState(false);
+    const [activeTab, setActiveTab] = useState('upload');
+    const [showStudyMode, setShowStudyMode] = useState(false);
+    const [lastUploadedDocId, setLastUploadedDocId] = useState(null);
+    const [selectedStudyMode, setSelectedStudyMode] = useState('');
+    const [generating, setGenerating] = useState(false);
+
+    const fileInputRef = useRef(null);
     const navigate = useNavigate();
+    const { theme, toggleTheme } = useTheme();
+    const user = authService.getCurrentUser();
 
     useEffect(() => {
         fetchDocuments();
@@ -23,20 +42,90 @@ function Dashboard() {
         }
     };
 
-    const handleUpload = async (e) => {
-        e.preventDefault();
-        if (!file) return;
-
-        setUploading(true);
+    const handleFileSelect = (selectedFile) => {
+        const allowedExts = ['.pdf', '.txt', '.docx'];
+        const ext = selectedFile.name.substring(selectedFile.name.lastIndexOf('.')).toLowerCase();
+        if (!allowedExts.includes(ext)) {
+            setError('Only PDF, TXT, and DOCX files are allowed');
+            return;
+        }
+        setFile(selectedFile);
         setError('');
+    };
+
+    const handleDrop = useCallback((e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const droppedFile = e.dataTransfer.files[0];
+        if (droppedFile) handleFileSelect(droppedFile);
+    }, []);
+
+    const handleDragOver = useCallback((e) => {
+        e.preventDefault();
+        setDragOver(true);
+    }, []);
+
+    const handleDragLeave = useCallback(() => {
+        setDragOver(false);
+    }, []);
+
+    const handleUpload = async () => {
+        if (!file) return;
+        setUploading(true);
+        setUploadProgress(0);
+        setError('');
+        setSuccessMsg('');
+
         try {
-            await studyKitService.uploadDocument(file);
+            const data = await studyKitService.uploadDocumentWithProgress(file, (progress) => {
+                setUploadProgress(progress);
+            });
             setFile(null);
+            setUploadProgress(100);
+            setSuccessMsg('Document uploaded and processing started!');
+            setLastUploadedDocId(data._id || data.document?._id);
+            setShowStudyMode(true);
             fetchDocuments();
+            setTimeout(() => {
+                setUploading(false);
+                setUploadProgress(0);
+            }, 1500);
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to upload document');
-        } finally {
             setUploading(false);
+            setUploadProgress(0);
+        }
+    };
+
+    const handleTextUpload = async () => {
+        if (!textContent.trim()) return;
+        // Create a text file from the content
+        const blob = new Blob([textContent], { type: 'text/plain' });
+        const textFile = new File([blob], `pasted-text-${Date.now()}.txt`, { type: 'text/plain' });
+
+        setUploading(true);
+        setUploadProgress(0);
+        setError('');
+        setSuccessMsg('');
+
+        try {
+            const data = await studyKitService.uploadDocumentWithProgress(textFile, (progress) => {
+                setUploadProgress(progress);
+            });
+            setTextContent('');
+            setUploadProgress(100);
+            setSuccessMsg('Text content uploaded and processing started!');
+            setLastUploadedDocId(data._id || data.document?._id);
+            setShowStudyMode(true);
+            fetchDocuments();
+            setTimeout(() => {
+                setUploading(false);
+                setUploadProgress(0);
+            }, 1500);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to upload text');
+            setUploading(false);
+            setUploadProgress(0);
         }
     };
 
@@ -50,101 +139,272 @@ function Dashboard() {
         }
     };
 
+    const handleGenerate = async () => {
+        if (!selectedStudyMode || !lastUploadedDocId) return;
+        if (selectedStudyMode === 'tutor') {
+            navigate(`/study-kit/${lastUploadedDocId}?tab=chat`);
+            return;
+        }
+        navigate(`/study-kit/${lastUploadedDocId}?tab=${selectedStudyMode}`);
+    };
+
     const handleLogout = () => {
         authService.logout();
         navigate('/login');
     };
 
+    const dashTabs = [
+        { id: 'upload', label: 'Upload', icon: <Upload size={18} /> },
+        { id: 'documents', label: 'My Documents', icon: <FileText size={18} /> },
+    ];
+
+    const studyModes = [
+        { id: 'quiz', label: 'Quiz', icon: <HelpCircle size={24} />, desc: 'Test your knowledge' },
+        { id: 'summary', label: 'Summary', icon: <BookOpen size={24} />, desc: 'Academic overview' },
+        { id: 'flashcards', label: 'Flashcards', icon: <Brain size={24} />, desc: 'Active recall cards' },
+        { id: 'notes', label: 'Notes', icon: <StickyNote size={24} />, desc: 'Study notes' },
+        { id: 'tutor', label: 'Tutor Mode', icon: <MessageCircle size={24} />, desc: 'Chat with AI' },
+    ];
+
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            <header className="bg-white shadow">
-                <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-                    <h1 className="text-3xl font-bold text-indigo-900">AI Study Kit Generator</h1>
-                    <button 
-                        onClick={handleLogout}
-                        className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
-                    >
-                        Logout
-                    </button>
+        <div className="dash-layout">
+            {/* Top Bar */}
+            <header className="dash-header">
+                <div className="dash-header-inner">
+                    <span className="dash-logo" onClick={() => navigate('/dashboard')}>
+                        <Sparkles size={20} style={{ color: 'var(--purple-accent)' }} />
+                        <span>AI Study Kit</span>
+                    </span>
+                    <div className="dash-header-actions">
+                        <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle theme">
+                            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+                        </button>
+                        <button onClick={handleLogout} className="dash-logout-btn">
+                            <LogOut size={18} />
+                            <span>Logout</span>
+                        </button>
+                    </div>
                 </div>
             </header>
 
-            <main className="flex-1 max-w-7xl mx-auto py-6 sm:px-6 lg:px-8 w-full">
-                <div className="px-4 py-6 sm:px-0 flex flex-col gap-8">
-                    
-                    {/* Upload Section */}
-                    <div className="bg-white rounded-lg shadow px-5 py-6 sm:px-6">
-                        <h2 className="text-lg font-medium text-gray-900 mb-4">Upload Lecture PDF</h2>
-                        {error && <div className="p-3 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">{error}</div>}
-                        
-                        <form onSubmit={handleUpload} className="flex items-center gap-4">
-                            <input 
-                                type="file" 
-                                accept="application/pdf"
-                                onChange={(e) => setFile(e.target.files[0])}
-                                className="block w-full text-sm text-slate-500
-                                  file:mr-4 file:py-2 file:px-4
-                                  file:rounded-md file:border-0
-                                  file:text-sm file:font-semibold
-                                  file:bg-indigo-50 file:text-indigo-700
-                                  hover:file:bg-indigo-100 cursor-pointer"
-                            />
-                            <button
-                                type="submit"
-                                disabled={!file || uploading}
-                                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
-                            >
-                                {uploading ? 'Processing...' : 'Upload'}
-                            </button>
-                        </form>
-                    </div>
+            <main className="dash-main">
+                {/* Welcome */}
+                <div className="dash-welcome">
+                    <h1>Welcome, <span className="text-gradient">{user?.name || 'Student'}</span></h1>
+                    <p>Upload your study materials and let AI do the heavy lifting.</p>
+                </div>
 
-                    {/* Documents List */}
-                    <div className="bg-white rounded-lg shadow overflow-hidden">
-                        <div className="px-5 py-5 border-b border-gray-200">
-                            <h3 className="text-lg leading-6 font-medium text-gray-900">Your Lecture Materials</h3>
+                {/* Tab Navigation */}
+                <div className="dash-tabs">
+                    {dashTabs.map(tab => (
+                        <button
+                            key={tab.id}
+                            className={`dash-tab ${activeTab === tab.id ? 'active' : ''}`}
+                            onClick={() => { setActiveTab(tab.id); setShowStudyMode(false); }}
+                        >
+                            {tab.icon}
+                            <span>{tab.label}</span>
+                        </button>
+                    ))}
+                </div>
+
+                {/* Messages */}
+                {error && (
+                    <div className="dash-alert dash-alert-error">
+                        <AlertCircle size={18} />
+                        <span>{error}</span>
+                        <button onClick={() => setError('')}><X size={16} /></button>
+                    </div>
+                )}
+                {successMsg && (
+                    <div className="dash-alert dash-alert-success">
+                        <CheckCircle2 size={18} />
+                        <span>{successMsg}</span>
+                        <button onClick={() => setSuccessMsg('')}><X size={16} /></button>
+                    </div>
+                )}
+
+                {/* Upload Tab */}
+                {activeTab === 'upload' && !showStudyMode && (
+                    <div className="dash-upload-grid">
+                        {/* Upload File Card */}
+                        <div
+                            className={`upload-card ${dragOver ? 'dragover' : ''}`}
+                            onDrop={handleDrop}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onClick={() => !file && fileInputRef.current?.click()}
+                        >
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".pdf,.txt,.docx"
+                                onChange={(e) => e.target.files[0] && handleFileSelect(e.target.files[0])}
+                                style={{ display: 'none' }}
+                            />
+                            <div className="upload-card-icon">
+                                <CloudUpload size={40} />
+                            </div>
+                            <h3>Upload File</h3>
+                            <p>Drag & drop or click to browse</p>
+                            <span className="upload-card-formats">PDF, TXT, DOCX — up to 15MB</span>
+
+                            {file && (
+                                <div className="upload-file-preview">
+                                    <FileText size={16} />
+                                    <span>{file.name}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); setFile(null); }}>
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            )}
+
+                            {uploading && (
+                                <div className="upload-progress">
+                                    <div className="progress-bar">
+                                        <div
+                                            className="progress-fill"
+                                            style={{ width: `${uploadProgress}%` }}
+                                        />
+                                    </div>
+                                    <span className="progress-text">{uploadProgress}%</span>
+                                </div>
+                            )}
+
+                            {file && !uploading && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); handleUpload(); }}
+                                    className="btn btn-primary upload-submit-btn"
+                                >
+                                    <Upload size={16} /> Upload & Process
+                                </button>
+                            )}
                         </div>
-                        <ul className="divide-y divide-gray-200">
-                            {documents.length === 0 ? (
-                                <li className="px-6 py-4 text-gray-500 text-center">No documents uploaded yet. Upload a PDF to get started!</li>
-                            ) : (
-                                documents.map((doc) => (
-                                    <li key={doc._id} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50">
-                                        <div className="flex flex-col gap-1">
-                                            <p className="text-sm font-medium text-indigo-600 truncate">{doc.originalName}</p>
-                                            <div className="flex gap-2">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                                    doc.status === 'embedded' ? 'bg-green-100 text-green-800' : 
-                                                    doc.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
-                                                }`}>
-                                                    {doc.status}
-                                                </span>
-                                                <span className="text-xs text-gray-400">
-                                                    {new Date(doc.createdAt).toLocaleDateString()}
-                                                </span>
+
+                        {/* Upload Text Card */}
+                        <div className="upload-card upload-text-card">
+                            <div className="upload-card-icon">
+                                <Type size={40} />
+                            </div>
+                            <h3>Upload Text</h3>
+                            <p>Paste your study content below</p>
+                            <textarea
+                                className="upload-textarea"
+                                value={textContent}
+                                onChange={(e) => setTextContent(e.target.value)}
+                                placeholder="Paste your notes, lecture content, or any text you want to study..."
+                                rows={6}
+                            />
+                            {uploading && (
+                                <div className="upload-progress">
+                                    <div className="progress-bar">
+                                        <div
+                                            className="progress-fill"
+                                            style={{ width: `${uploadProgress}%` }}
+                                        />
+                                    </div>
+                                    <span className="progress-text">{uploadProgress}%</span>
+                                </div>
+                            )}
+                            {textContent.trim() && !uploading && (
+                                <button
+                                    onClick={handleTextUpload}
+                                    className="btn btn-primary upload-submit-btn"
+                                >
+                                    <Upload size={16} /> Upload & Process
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Study Mode Selection */}
+                {showStudyMode && (
+                    <div className="study-mode-panel">
+                        <h2><Sparkles size={22} /> Choose Your Study Mode</h2>
+                        <p>Your document is being processed. Select how you'd like to study:</p>
+                        <div className="study-mode-grid">
+                            {studyModes.map(mode => (
+                                <button
+                                    key={mode.id}
+                                    className={`study-mode-card ${selectedStudyMode === mode.id ? 'selected' : ''}`}
+                                    onClick={() => setSelectedStudyMode(mode.id)}
+                                >
+                                    <div className="study-mode-icon">{mode.icon}</div>
+                                    <span className="study-mode-label">{mode.label}</span>
+                                    <span className="study-mode-desc">{mode.desc}</span>
+                                </button>
+                            ))}
+                        </div>
+                        <div className="study-mode-actions">
+                            <button
+                                onClick={() => { setShowStudyMode(false); setSelectedStudyMode(''); }}
+                                className="btn btn-outline"
+                            >
+                                Upload More
+                            </button>
+                            <button
+                                onClick={handleGenerate}
+                                disabled={!selectedStudyMode}
+                                className="btn btn-primary"
+                            >
+                                <Sparkles size={16} /> Generate
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Documents Tab */}
+                {activeTab === 'documents' && (
+                    <div className="dash-documents">
+                        <h2>Your Lecture Materials</h2>
+                        {documents.length === 0 ? (
+                            <div className="dash-empty">
+                                <FileText size={48} />
+                                <p>No documents uploaded yet.</p>
+                                <button onClick={() => setActiveTab('upload')} className="btn btn-primary">
+                                    Upload Your First Document
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="dash-doc-list">
+                                {documents.map((doc) => (
+                                    <div key={doc._id} className="dash-doc-item">
+                                        <div className="dash-doc-info">
+                                            <FileText size={20} className="dash-doc-icon" />
+                                            <div>
+                                                <p className="dash-doc-name">{doc.originalName}</p>
+                                                <div className="dash-doc-meta">
+                                                    <span className={`dash-doc-status dash-doc-status-${doc.status}`}>
+                                                        {doc.status}
+                                                    </span>
+                                                    <span className="dash-doc-date">
+                                                        {new Date(doc.createdAt).toLocaleDateString()}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="flex gap-3">
-                                            <button 
+                                        <div className="dash-doc-actions">
+                                            <button
                                                 onClick={() => navigate(`/study-kit/${doc._id}`)}
                                                 disabled={doc.status !== 'embedded'}
-                                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                                className="btn btn-primary btn-sm"
                                             >
-                                                Open Study Kit
+                                                <ExternalLink size={14} /> Open
                                             </button>
-                                            <button 
+                                            <button
                                                 onClick={() => handleDelete(doc._id)}
-                                                className="text-red-600 hover:text-red-900 text-sm font-medium"
+                                                className="dash-doc-delete"
                                             >
-                                                Delete
+                                                <Trash2 size={16} />
                                             </button>
                                         </div>
-                                    </li>
-                                ))
-                            )}
-                        </ul>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
-                </div>
+                )}
             </main>
         </div>
     );

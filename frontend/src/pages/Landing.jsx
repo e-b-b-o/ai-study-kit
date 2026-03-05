@@ -1,13 +1,16 @@
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import authService from '../services/authService';
 import { useTheme } from '../components/ThemeProvider';
-import { BookOpen, Brain, Zap, ArrowRight, Clock, FileText, CheckCircle2, Sun, Moon } from 'lucide-react';
+import { BookOpen, Brain, Zap, ArrowRight, Clock, FileText, CheckCircle2, Sun, Moon, Menu, X } from 'lucide-react';
 import heroImg from '../assets/hero_study_illustration_1772654680512.png';
 
 function Landing() {
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
   const { theme, toggleTheme } = useTheme();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   const handleCTA = () => {
     if (user) {
@@ -17,11 +20,35 @@ function Landing() {
     }
   };
 
+  // Close menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    };
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
+
+  // Close menu on resize above mobile
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) setMenuOpen(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const closeMenu = () => setMenuOpen(false);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div className="landing-page">
 
       {/* ── NAVBAR ── */}
-      <nav className="navbar">
+      <nav className="navbar" ref={menuRef}>
         <div className="nav-content">
           <Link to="/" className="logo">
             <span style={{ fontWeight: 800, fontSize: '1.2rem', letterSpacing: '-0.03em', color: 'var(--purple-accent)' }}>
@@ -29,6 +56,7 @@ function Landing() {
             </span>
           </Link>
 
+          {/* Desktop Nav */}
           <div className="nav-links">
             <a href="#features">Features</a>
             <a href="#how-it-works">How it Works</a>
@@ -49,13 +77,44 @@ function Landing() {
               </>
             )}
           </div>
+
+          {/* Hamburger Button (mobile only) */}
+          <button
+            className="hamburger-btn"
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label="Toggle mobile menu"
+          >
+            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+
+        {/* Mobile Nav Dropdown */}
+        <div className={`mobile-nav-menu ${menuOpen ? 'open' : ''}`}>
+          <a href="#features" onClick={closeMenu}>Features</a>
+          <a href="#how-it-works" onClick={closeMenu}>How it Works</a>
+          <a href="#pricing" onClick={closeMenu}>Pricing</a>
+          <div className="mobile-nav-divider" />
+          {user ? (
+            <button onClick={() => { navigate('/dashboard'); closeMenu(); }} className="btn btn-primary mobile-nav-btn">
+              Go to Dashboard
+            </button>
+          ) : (
+            <>
+              <Link to="/login" onClick={closeMenu} className="mobile-nav-link">Log In</Link>
+              <Link to="/register" onClick={closeMenu} className="btn btn-primary mobile-nav-btn">Sign Up Free</Link>
+            </>
+          )}
+          <button onClick={() => { toggleTheme(); closeMenu(); }} className="mobile-nav-theme">
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
+          </button>
         </div>
       </nav>
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
 
         {/* ── HERO (Two-Column Layout) ── */}
-        <section className="hero">
+        <section className="hero" id="hero">
           <div className="hero-bg-gradient" />
           <div className="hero-grid">
             {/* LEFT — Text Content */}

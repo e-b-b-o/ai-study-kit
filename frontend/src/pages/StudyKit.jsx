@@ -1,20 +1,39 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { studyKitService } from '../services/studyKitService';
+import { useTheme } from '../components/ThemeProvider';
+import ChatSidebar from '../components/ChatSidebar';
+import {
+    ArrowLeft, BookOpen, HelpCircle, Brain, StickyNote,
+    MessageCircle, Loader2, Sun, Moon, RotateCcw, Sparkles
+} from 'lucide-react';
 
 function StudyKit() {
     const { id } = useParams();
     const navigate = useNavigate();
-    
+    const [searchParams] = useSearchParams();
+    const { theme, toggleTheme } = useTheme();
+
     const [document, setDocument] = useState(null);
     const [summary, setSummary] = useState(null);
     const [quiz, setQuiz] = useState(null);
+    const [flashcards, setFlashcards] = useState(null);
+    const [notes, setNotes] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [view, setView] = useState('summary'); // 'summary' or 'quiz'
+    const [view, setView] = useState('summary');
+    const [chatOpen, setChatOpen] = useState(false);
+    const [flippedCards, setFlippedCards] = useState({});
 
     useEffect(() => {
         fetchDocument();
+        const tab = searchParams.get('tab');
+        if (tab && ['summary', 'quiz', 'flashcards', 'notes'].includes(tab)) {
+            setView(tab);
+        }
+        if (tab === 'chat') {
+            setChatOpen(true);
+        }
     }, [id]);
 
     const fetchDocument = async () => {
@@ -23,6 +42,8 @@ function StudyKit() {
             setDocument(data);
             if (data.summary) setSummary(data.summary);
             if (data.quiz && data.quiz.length > 0) setQuiz(data.quiz);
+            if (data.flashcards && data.flashcards.length > 0) setFlashcards(data.flashcards);
+            if (data.notes) setNotes(data.notes);
         } catch (err) {
             setError('Failed to fetch study kit');
         }
@@ -54,110 +75,235 @@ function StudyKit() {
         }
     };
 
-    if (!document) return <div className="p-8 text-center text-gray-500">Loading...</div>;
+    const handleGenerateFlashcards = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const data = await studyKitService.generateFlashcards(id);
+            setFlashcards(data.flashcards);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to generate flashcards');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleGenerateNotes = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const data = await studyKitService.generateNotes(id);
+            setNotes(data.notes);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to generate notes');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const toggleFlipCard = (index) => {
+        setFlippedCards(prev => ({ ...prev, [index]: !prev[index] }));
+    };
+
+    const tabs = [
+        { id: 'summary', label: 'Summary', icon: <BookOpen size={16} /> },
+        { id: 'quiz', label: 'Quiz', icon: <HelpCircle size={16} /> },
+        { id: 'flashcards', label: 'Flashcards', icon: <Brain size={16} /> },
+        { id: 'notes', label: 'Notes', icon: <StickyNote size={16} /> },
+    ];
+
+    if (!document) {
+        return (
+            <div className="sk-loading">
+                <Loader2 size={32} className="spin" />
+                <p>Loading study kit...</p>
+            </div>
+        );
+    }
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            <header className="bg-white shadow">
-                <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => navigate('/')} className="text-gray-500 hover:text-indigo-600">
-                            ← Back
+        <div className="sk-layout">
+            {/* Header */}
+            <header className="sk-header">
+                <div className="sk-header-inner">
+                    <div className="sk-header-left">
+                        <button onClick={() => navigate('/dashboard')} className="sk-back-btn">
+                            <ArrowLeft size={20} />
                         </button>
-                        <h1 className="text-2xl font-bold text-gray-900 truncate max-w-md">
-                            Study Kit: {document.originalName}
-                        </h1>
+                        <div className="sk-header-title">
+                            <h1>{document.originalName}</h1>
+                        </div>
+                    </div>
+                    <div className="sk-header-right">
+                        <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle theme">
+                            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+                        </button>
+                        <button
+                            onClick={() => setChatOpen(!chatOpen)}
+                            className={`sk-chat-toggle ${chatOpen ? 'active' : ''}`}
+                        >
+                            <MessageCircle size={18} />
+                            <span>AI Tutor</span>
+                        </button>
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 max-w-5xl mx-auto py-8 sm:px-6 lg:px-8 w-full">
-                
-                {error && <div className="p-4 mb-6 text-sm text-red-700 bg-red-100 rounded-lg">{error}</div>}
-
-                {/* Tabs */}
-                <div className="flex gap-4 mb-6 border-b border-gray-200">
-                    <button 
-                        onClick={() => setView('summary')}
-                        className={`pb-4 px-2 font-medium text-sm border-b-2 ${view === 'summary' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                    >
-                        Academic Summary
-                    </button>
-                    <button 
-                        onClick={() => setView('quiz')}
-                        className={`pb-4 px-2 font-medium text-sm border-b-2 ${view === 'quiz' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                    >
-                        Practice Quiz
-                    </button>
-                </div>
-
-                {/* Content Area */}
-                <div className="bg-white shadow rounded-lg p-8 min-h-[500px]">
-                    {view === 'summary' && (
-                        <div>
-                            {!summary ? (
-                                <div className="text-center py-20">
-                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Summary Yet</h3>
-                                    <p className="text-gray-500 mb-6 font-light">Generate a structured academic summary strictly from the uploaded PDF.</p>
-                                    <button 
-                                        onClick={handleGenerateSummary}
-                                        disabled={loading}
-                                        className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
-                                    >
-                                        {loading ? 'Analyzing Content...' : 'Generate Summary'}
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="prose max-w-none prose-indigo">
-                                    <h2 className="text-2xl font-bold mb-4 text-indigo-900">Academic Summary</h2>
-                                    <div className="whitespace-pre-wrap text-gray-800 leading-relaxed font-sans">
-                                        {summary}
-                                    </div>
-                                </div>
-                            )}
+            <div className="sk-body">
+                <main className={`sk-main ${chatOpen ? 'sidebar-open' : ''}`}>
+                    {error && (
+                        <div className="dash-alert dash-alert-error" style={{ margin: '0 0 1.5rem' }}>
+                            <span>{error}</span>
                         </div>
                     )}
 
-                    {view === 'quiz' && (
-                        <div>
-                            {!quiz ? (
-                                <div className="text-center py-20">
-                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Quiz Yet</h3>
-                                    <p className="text-gray-500 mb-6 font-light">Generate 10 deterministic multiple-choice questions based ONLY on the text.</p>
-                                    <button 
-                                        onClick={handleGenerateQuiz}
-                                        disabled={loading}
-                                        className="inline-flex justify-center py-2 px-6 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
-                                    >
-                                        {loading ? 'Generating Quiz...' : 'Generate 10-Question Quiz'}
-                                    </button>
-                                </div>
-                            ) : (
-                                <div>
-                                    <h2 className="text-2xl font-bold mb-6 text-indigo-900">Practice Quiz</h2>
-                                    <div className="flex flex-col gap-8">
-                                        {quiz.map((q, i) => (
-                                            <div key={i} className="bg-indigo-50/50 p-6 rounded-lg border border-indigo-100">
-                                                <p className="font-semibold text-gray-900 mb-4">{i + 1}. {q.question}</p>
-                                                <ul className="flex flex-col gap-2 pl-4">
-                                                    {q.options.map((opt, optIndex) => (
-                                                        <li key={optIndex} className="text-gray-700 list-disc">{opt}</li>
-                                                    ))}
-                                                </ul>
-                                                <div className="mt-4 pt-4 border-t border-indigo-200">
-                                                    <p className="text-sm font-medium text-indigo-800">
-                                                        <span className="font-bold">Correct Answer:</span> {q.correctAnswer}
-                                                    </p>
+                    {/* Tabs */}
+                    <div className="sk-tabs">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                className={`sk-tab ${view === tab.id ? 'active' : ''}`}
+                                onClick={() => setView(tab.id)}
+                            >
+                                {tab.icon}
+                                <span>{tab.label}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Content */}
+                    <div className="sk-content">
+                        {/* ── Summary ── */}
+                        {view === 'summary' && (
+                            <div className="sk-panel">
+                                {!summary ? (
+                                    <div className="sk-empty">
+                                        <BookOpen size={48} />
+                                        <h3>No Summary Yet</h3>
+                                        <p>Generate a structured academic summary strictly from your uploaded material.</p>
+                                        <button onClick={handleGenerateSummary} disabled={loading} className="btn btn-primary">
+                                            {loading ? <><Loader2 size={16} className="spin" /> Analyzing...</> : <><Sparkles size={16} /> Generate Summary</>}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="sk-result">
+                                        <h2>Academic Summary</h2>
+                                        <div className="sk-text-content">{summary}</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── Quiz ── */}
+                        {view === 'quiz' && (
+                            <div className="sk-panel">
+                                {!quiz ? (
+                                    <div className="sk-empty">
+                                        <HelpCircle size={48} />
+                                        <h3>No Quiz Yet</h3>
+                                        <p>Generate 10 multiple-choice questions based only on your uploaded text.</p>
+                                        <button onClick={handleGenerateQuiz} disabled={loading} className="btn btn-primary">
+                                            {loading ? <><Loader2 size={16} className="spin" /> Generating...</> : <><Sparkles size={16} /> Generate Quiz</>}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="sk-result">
+                                        <h2>Practice Quiz</h2>
+                                        <div className="sk-quiz-list">
+                                            {quiz.map((q, i) => (
+                                                <div key={i} className="sk-quiz-item">
+                                                    <p className="sk-quiz-question">{i + 1}. {q.question}</p>
+                                                    <ul className="sk-quiz-options">
+                                                        {q.options.map((opt, oi) => (
+                                                            <li key={oi}>{opt}</li>
+                                                        ))}
+                                                    </ul>
+                                                    <div className="sk-quiz-answer">
+                                                        <strong>Correct:</strong> {q.correctAnswer}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            </main>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── Flashcards ── */}
+                        {view === 'flashcards' && (
+                            <div className="sk-panel">
+                                {!flashcards ? (
+                                    <div className="sk-empty">
+                                        <Brain size={48} />
+                                        <h3>No Flashcards Yet</h3>
+                                        <p>Generate flashcards for active recall practice from your material.</p>
+                                        <button onClick={handleGenerateFlashcards} disabled={loading} className="btn btn-primary">
+                                            {loading ? <><Loader2 size={16} className="spin" /> Generating...</> : <><Sparkles size={16} /> Generate Flashcards</>}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="sk-result">
+                                        <div className="sk-result-header">
+                                            <h2>Flashcards</h2>
+                                            <button onClick={() => setFlippedCards({})} className="btn btn-outline btn-sm">
+                                                <RotateCcw size={14} /> Reset All
+                                            </button>
+                                        </div>
+                                        <div className="sk-flashcard-grid">
+                                            {flashcards.map((card, i) => (
+                                                <div
+                                                    key={i}
+                                                    className={`sk-flashcard ${flippedCards[i] ? 'flipped' : ''}`}
+                                                    onClick={() => toggleFlipCard(i)}
+                                                >
+                                                    <div className="sk-flashcard-inner">
+                                                        <div className="sk-flashcard-front">
+                                                            <span className="sk-flashcard-label">Question</span>
+                                                            <p>{card.front}</p>
+                                                        </div>
+                                                        <div className="sk-flashcard-back">
+                                                            <span className="sk-flashcard-label">Answer</span>
+                                                            <p>{card.back}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── Notes ── */}
+                        {view === 'notes' && (
+                            <div className="sk-panel">
+                                {!notes ? (
+                                    <div className="sk-empty">
+                                        <StickyNote size={48} />
+                                        <h3>No Notes Yet</h3>
+                                        <p>Generate concise, organized study notes from your material.</p>
+                                        <button onClick={handleGenerateNotes} disabled={loading} className="btn btn-primary">
+                                            {loading ? <><Loader2 size={16} className="spin" /> Generating...</> : <><Sparkles size={16} /> Generate Notes</>}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="sk-result">
+                                        <h2>Study Notes</h2>
+                                        <div className="sk-text-content">{notes}</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </main>
+
+                {/* Chat Sidebar */}
+                <ChatSidebar
+                    documentId={id}
+                    isOpen={chatOpen}
+                    onClose={() => setChatOpen(false)}
+                />
+            </div>
         </div>
     );
 }
