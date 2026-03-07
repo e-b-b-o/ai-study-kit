@@ -1,5 +1,6 @@
 const Document = require('../models/Document.js');
 const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 
 const pythonServiceUrl = process.env.RAG_SERVICE_URL || 'http://127.0.0.1:5000';
@@ -19,22 +20,28 @@ const uploadDocument = async (req, res) => {
             status: 'pending'
         });
 
-        // Trigger Python RAG Ingestion by passing the file path and document ID
-        // Because they share a filesystem, this is the most robust local way
+        // Trigger Python RAG Ingestion by passing the full absolute path and document ID
         try {
+            const absolutePath = path.resolve(doc.path);
             await axios.post(`${pythonServiceUrl}/ingest`, {
                 document_id: doc._id.toString(),
-                file_path: doc.path
+                file_path: absolutePath
             }, { timeout: 60000 }); // 60 second timeout for ingestion
 
             doc.status = 'embedded';
             await doc.save();
             return res.status(201).json({ message: 'File uploaded and embedded successfully', doc });
         } catch (ragError) {
-            console.error("RAG Ingestion Error:", ragError.message);
+            const status = ragError.response?.status;
+            const errorData = ragError.response?.data;
+            console.error(`❌ RAG Ingestion Error [${status}]:`, errorData || ragError.message);
+            
             doc.status = 'failed';
             await doc.save();
-            return res.status(500).json({ message: 'File uploaded but RAG embedding failed' });
+            return res.status(500).json({ 
+                message: 'File uploaded but RAG embedding failed',
+                error: errorData?.[ "error" ] || ragError.message
+            });
         }
     } catch (error) {
         console.error("Document Upload Error:", error);
@@ -83,7 +90,9 @@ const deleteDocument = async (req, res) => {
                 document_id: doc._id.toString()
             });
         } catch (e) {
-            console.error("Failed to reset RAG vectors:", e.message);
+            const status = e.response?.status;
+            const errorData = e.response?.data;
+            console.error(`❌ Failed to reset RAG vectors [${status}]:`, errorData || e.message);
         }
 
         // Remove from DB
