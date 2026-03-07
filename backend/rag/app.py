@@ -129,22 +129,28 @@ def reset_db():
         document_id = data.get('document_id')
         
         if document_id:
+            print(f"🔄 Resetting vectors for document: {document_id}")
             delete_document_vectors(document_id)
             return jsonify({"message": f"Vectors for {document_id} removed"}), 200
         else:
             return jsonify({"error": "document_id required"}), 400
     except Exception as e:
-        print("❌ Reset Error:", str(e))
+        print(f"❌ Reset Error for {document_id if 'document_id' in locals() else 'unknown'}:", str(e))
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    api_key_status = "set" if (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")) else "missing"
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    api_key_status = "set" if api_key else "missing"
     return jsonify({
         "status": "healthy",
         "api_key": api_key_status,
-        "service": "rag_service"
+        "api_key_preview": f"{api_key[:4]}...{api_key[-4:]}" if api_key else None,
+        "service": "rag_service",
+        "working_dir": os.getcwd()
     }), 200
 
 
